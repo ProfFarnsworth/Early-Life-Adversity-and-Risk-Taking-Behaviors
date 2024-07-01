@@ -1,0 +1,852 @@
+---
+d---
+title: "ELA Implications for Risk-Taking Behaviors: Data Preparation"
+author: Matthew Farnsworth
+format: html
+editor: visual
+---
+
+```{r}
+#| echo: false
+#loading necessary packages
+library(tidyverse)
+library(car)
+library(readxl)
+library(psych)
+```
+
+# Reading in Data
+
+Initialize a data directory defined by a path to the available ABCD raw tabulated data on the user(s) device.
+
+```{r}
+#| echo: false
+
+#set file path for raw data files
+data_dir <- '~/Library/CloudStorage/Box-Box/ABCD Tabulated Data/5.1/core/'
+
+
+#Age
+tlfb_age = read.csv(file.path(data_dir, "substance-use/su_y_sui.csv")) %>%
+  filter(eventname == "baseline_year_1_arm_1" | 
+         eventname == "2_year_follow_up_y_arm_1") %>%
+  dplyr::select(src_subject_id, eventname, tlfb_age)
+
+#Demographics
+demog <- read.csv(file.path(data_dir, "abcd-general/abcd_p_demo.csv")) %>%
+  filter(eventname == "baseline_year_1_arm_1" | 
+         eventname == "2_year_follow_up_y_arm_1") %>%
+  select(src_subject_id, eventname, demo_sex_v2, demo_race_a_p___10,
+         demo_race_a_p___11,demo_race_a_p___12, demo_race_a_p___13, demo_race_a_p___14,
+         demo_race_a_p___15, demo_race_a_p___16, demo_race_a_p___17, demo_race_a_p___18,
+         demo_race_a_p___19, demo_race_a_p___20, demo_race_a_p___21, demo_race_a_p___22,
+         demo_race_a_p___23, demo_race_a_p___24, demo_race_a_p___25,demo_race_a_p___77, 
+         demo_race_a_p___99, demo_ethn_v2, demo_prnt_marital_v2, demo_prnt_ed_v2,
+         demo_prtnr_ed_v2, demo_comb_income_v2)
+
+
+##################################################
+####            Orendain Vars.                ####
+##################################################
+
+#Function for reading variables by Orendain et. al.
+load_orendain_ela <- function(data_dir, supp_features=TRUE) {
+
+#Physical and Sexual Violence
+mh_p_ksads <- read.csv(file.path(data_dir, "mental-health/mh_p_ksads_ptsd.csv")) %>%
+  filter(eventname == "baseline_year_1_arm_1" | 
+         eventname == "2_year_follow_up_y_arm_1") %>%
+  select(src_subject_id, eventname, ksads_ptsd_raw_761_p,
+           ksads_ptsd_raw_762_p, ksads_ptsd_raw_763_p,
+           ksads_ptsd_raw_767_p, ksads_ptsd_raw_768_p,
+           ksads_ptsd_raw_769_p, ksads_ptsd_raw_760_p,
+           ksads_ptsd_raw_764_p, ksads_ptsd_raw_765_p)
+
+#Parent psychopathology
+mh_p_fhx <- read_csv(file.path(data_dir, "mental-health/mh_p_fhx.csv")) %>%
+    filter(eventname == "baseline_year_1_arm_1" | 
+         eventname == "2_year_follow_up_y_arm_1") %>%
+    select(src_subject_id, eventname, famhx_4_p,
+           fam_history_5_yes_no, fam_history_6_yes_no,
+           fam_history_7_yes_no, fam_history_8_yes_no,
+           fam_history_11_yes_no, fam_history_12_yes_no,
+           fam_history_13_yes_no)
+
+#Neighborhood Threat
+ce_p_nsc <- read_csv(file.path(data_dir, "culture-environment/ce_p_nsc.csv")) %>%
+  filter(eventname == "baseline_year_1_arm_1" | 
+         eventname == "2_year_follow_up_y_arm_1") %>%
+    select(src_subject_id, eventname, neighborhood3r_p,
+           neighborhood2r_p)
+
+#Parental Substance Use
+ph_p_dhx <- read_csv(file.path(data_dir, "physical-health/ph_p_dhx.csv")) %>%
+  filter(eventname == "baseline_year_1_arm_1" | 
+         eventname == "2_year_follow_up_y_arm_1") %>%
+    select(src_subject_id, eventname,
+           devhx_9_tobacco, devhx_9_alcohol,
+           devhx_9_marijuana, devhx_9_coc_crack,
+           devhx_9_her_morph, devhx_9_oxycont)
+
+#Scarcity
+scarcity <- read_csv(file.path(data_dir, "abcd-general/abcd_p_demo.csv")) %>%
+  filter(eventname == "baseline_year_1_arm_1" | 
+         eventname == "2_year_follow_up_y_arm_1") %>%
+   select(src_subject_id, eventname, 
+           demo_fam_exp1_v2, demo_fam_exp5_v2)
+
+scarcity <- scarcity %>%
+  mutate(demo_fam_exp1_v2 = factor(demo_fam_exp1_v2),
+         demo_fam_exp1_v2 = fct_collapse(demo_fam_exp1_v2,
+                                         "0" = "0",
+                                         "1" = "1",
+                                         "0" = "777"),
+         demo_fam_exp5_v2 = factor(demo_fam_exp5_v2),
+         demo_fam_exp5_v2 = fct_collapse(demo_fam_exp5_v2,
+                                         "0" = "0",
+                                         "1" = "1",
+                                         "0" = "777"),
+         )
+
+#Household Dysfunction
+ce_y_fes <- read_csv(file.path(data_dir, "culture-environment/ce_y_fes.csv")) %>%
+  filter(eventname == "baseline_year_1_arm_1" | 
+         eventname == "2_year_follow_up_y_arm_1") %>%
+    select(src_subject_id, eventname, fes_youth_q6, 
+           fes_youth_q1, fes_youth_q5)
+
+merged_data <- list(mh_p_ksads, mh_p_fhx, ce_p_nsc, ph_p_dhx, scarcity, ce_y_fes) %>%
+  reduce(full_join, by = c("src_subject_id", "eventname"))
+
+  load_supp_ela <- function() {
+    # Read the Excel file to get the supp_lookup table
+    supp_lookup <- read_xlsx("~/Desktop/UMN REU FILES/orendain_vars_from_supplement.xlsx")
+    # Get the unique file paths
+    supp_paths <- file.path(data_dir,
+                            unique(supp_lookup$table_file_path))
+    # Function to read CSV file and select the specified columns
+    read_and_select <- function(file_path, var_names) {
+      # Read the CSV file
+      data <- read_csv(paste0(file_path, ".csv"))
+      # Select the specified columns
+      selected_data <- data %>% select(all_of(var_names))
+      return(selected_data)
+    }
+    # Apply the function to each file path with corresponding var_names
+    selected_tables <- lapply(supp_paths, function(path) {
+      var_names <- supp_lookup %>%
+        filter(table_name == basename(path)) %>%
+        pull(var_name)
+      var_names <- c("src_subject_id", "eventname", var_names)
+      read_and_select(path, var_names)
+    })
+    # Merge the tables in the list by "src_subject_id" and "eventname"
+    merged_data <- reduce(selected_tables, function(x, y) {
+      full_join(x, y, by = c("src_subject_id", "eventname"))
+    })
+  }
+  if (supp_features==TRUE) {
+    supp_data <- load_supp_ela()
+    merged_data <- merge(merged_data, supp_data)
+  }
+  return(merged_data %>%
+           filter(eventname == "baseline_year_1_arm_1" | 
+                  eventname == "2_year_follow_up_y_arm_1"))
+  
+} #end of function
+
+##################################################
+####            Brieant Vars.                 ####
+##################################################
+
+load_brieant_ela <- function(data_dir) {
+  # Read in family variables
+  rel <- read.csv(paste(data_dir, 'abcd-general/abcd_y_lt.csv', sep='/')) %>%
+    filter(eventname == "baseline_year_1_arm_1" | 
+           eventname == "2_year_follow_up_y_arm_1") %>%
+    select(src_subject_id, eventname, rel_family_id)
+  
+  print("1")
+  
+  # Read in family substance use summary scores
+  fhx <- read.csv(paste(data_dir, 'mental-health/mh_p_fhx.csv', sep='/')) %>%
+    filter(eventname == "baseline_year_1_arm_1" | 
+           eventname == "2_year_follow_up_y_arm_1") %>%
+    select(src_subject_id, eventname, famhx_ss_fath_prob_alc_p, famhx_ss_moth_prob_alc_p,
+           famhx_ss_fath_prob_dg_p, famhx_ss_moth_prob_dg_p)
+  
+  print("2")
+  
+  # Read in parent demographics
+  pdemo <- read.csv(paste(data_dir, 'abcd-general/abcd_p_demo.csv', sep='/')) %>%
+    filter(eventname == "baseline_year_1_arm_1" | 
+           eventname == "2_year_follow_up_y_arm_1") %>% 
+    select(src_subject_id, eventname, demo_prim, demo_prnt_marital_v2, demo_prnt_ed_v2,
+           demo_prtnr_ed_v2, demo_comb_income_v2, demo_fam_exp1_v2, demo_fam_exp2_v2,
+           demo_fam_exp3_v2, demo_fam_exp4_v2, demo_fam_exp5_v2, demo_fam_exp6_v2,
+           demo_fam_exp7_v2)
+  
+  print("3")
+  
+  # Read in CRPBI
+  crpbi <- read.csv(paste(data_dir, 'culture-environment/ce_y_crpbi.csv', sep='/')) %>%
+    filter(eventname == "baseline_year_1_arm_1" | 
+           eventname == "2_year_follow_up_y_arm_1") %>% 
+    select(src_subject_id, eventname, crpbi_parent1_y, crpbi_caregiver12_y, crpbi_parent2_y,
+           crpbi_caregiver13_y, crpbi_parent3_y, crpbi_caregiver14_y, crpbi_parent4_y,
+           crpbi_caregiver15_y, crpbi_parent5_y, crpbi_caregiver16_y)
+  
+  # Read in parent report family environment scale
+  fes02 <- read.csv(paste(data_dir, 'culture-environment/ce_p_fes.csv', sep='/')) %>%
+    filter(eventname == "baseline_year_1_arm_1" | 
+           eventname == "2_year_follow_up_y_arm_1") %>% 
+    select(src_subject_id, eventname, fam_enviro1_p, fam_enviro2r_p, fam_enviro3_p,
+           fam_enviro4r_p, fam_enviro5_p,
+           fam_enviro6_p, fam_enviro7r_p, fam_enviro8_p, fam_enviro9r_p)
+  
+  # Read in youth report family environment scale
+  fes01 <- read.csv(paste(data_dir, 'culture-environment/ce_y_fes.csv', sep='/')) %>%
+    filter(eventname == "baseline_year_1_arm_1" | 
+           eventname == "2_year_follow_up_y_arm_1") %>% 
+    select(src_subject_id, eventname, fes_youth_q1, fes_youth_q2, fes_youth_q3, fes_youth_q4,
+           fes_youth_q5, fes_youth_q6,
+           fes_youth_q7, fes_youth_q8, fes_youth_q9)
+  
+  # Read in ksads trauma, parent interview
+  ptsd <- read.csv(paste(data_dir, 'mental-health/mh_p_ksads_ptsd.csv', sep='/')) %>%
+    filter(eventname == "baseline_year_1_arm_1" | 
+           eventname == "2_year_follow_up_y_arm_1") %>% 
+    select(src_subject_id, eventname, ksads_ptsd_raw_754_p, ksads_ptsd_raw_755_p,
+           ksads_ptsd_raw_756_p, ksads_ptsd_raw_757_p, ksads_ptsd_raw_758_p,
+           ksads_ptsd_raw_759_p, ksads_ptsd_raw_760_p, ksads_ptsd_raw_761_p,
+           ksads_ptsd_raw_762_p, ksads_ptsd_raw_763_p, ksads_ptsd_raw_764_p,
+           ksads_ptsd_raw_765_p, ksads_ptsd_raw_766_p, ksads_ptsd_raw_767_p,
+           ksads_ptsd_raw_768_p, ksads_ptsd_raw_769_p, ksads_ptsd_raw_770_p)
+  
+  # Read in parental monitoring
+  pmq <- read.csv(paste(data_dir, 'culture-environment/ce_y_pm.csv', sep='/')) %>%
+    filter(eventname == "baseline_year_1_arm_1" | 
+           eventname == "2_year_follow_up_y_arm_1") %>% 
+    select(src_subject_id, eventname, parent_monitor_q1_y, parent_monitor_q2_y,
+           parent_monitor_q3_y, parent_monitor_q4_y, parent_monitor_q5_y)
+  
+  # Read in neighborhood safety and crime, parents
+  pnscss <- read.csv(paste(data_dir, 'culture-environment/ce_p_nsc.csv', sep='/')) %>%
+    filter(eventname == "baseline_year_1_arm_1" | 
+           eventname == "2_year_follow_up_y_arm_1") %>%
+    select(src_subject_id, eventname, nsc_p_ss_mean_3_items)
+  
+  # Read in neighborhood safety and crime, youth
+  ynsc <- read.csv(paste(data_dir, 'culture-environment/ce_y_nsc.csv', sep='/')) %>%
+    filter(eventname == "baseline_year_1_arm_1" | 
+           eventname == "2_year_follow_up_y_arm_1") %>% 
+    select(src_subject_id, eventname, neighborhood_crime_y)
+  
+  # Read in ASR (parent psychopathology)
+  asr <- read.csv(paste(data_dir, 'mental-health/mh_p_asr.csv', sep='/')) %>%
+    filter(eventname == "baseline_year_1_arm_1" | 
+           eventname == "2_year_follow_up_y_arm_1") %>% 
+    select(src_subject_id, eventname, asr_scr_anxdisord_r, asr_scr_somaticpr_r, asr_scr_depress_r, asr_scr_avoidant_r,
+           asr_scr_adhd_r, asr_scr_antisocial_r, asr_scr_inattention_r, asr_scr_hyperactive_r)
+  
+  # Read in ADI data file
+  ADI <- read.csv(paste(data_dir, 'linked-external-data/led_l_adi.csv', sep='/')) %>%
+    filter(eventname == "baseline_year_1_arm_1" | 
+           eventname == "2_year_follow_up_y_arm_1") %>% 
+    select(src_subject_id, eventname, reshist_addr1_adi_wsum)
+  
+  print(dim(pdemo))
+  print(dim(crpbi))
+  print(dim(fes01))
+  print(dim(fes02))
+  print(dim(ptsd))
+  print(dim(pmq))
+  print(dim(pnscss))
+  print(dim(ynsc))
+  print(dim(rel))
+  print(dim(ADI))
+  print(dim(fhx))
+  print(dim(asr))
+  
+  # Merge all data frames
+  merged_data <- full_join(fhx, asr, by = c("src_subject_id", "eventname")) %>%
+    full_join(pdemo, by = c("src_subject_id", "eventname")) %>%
+    full_join(crpbi, by = c("src_subject_id", "eventname")) %>%
+    full_join(fes01, by = c("src_subject_id", "eventname")) %>%
+    full_join(fes02, by = c("src_subject_id", "eventname")) %>%
+    full_join(ptsd, by = c("src_subject_id", "eventname")) %>%
+    full_join(pmq, by = c("src_subject_id", "eventname")) %>%
+    full_join(pnscss, by = c("src_subject_id", "eventname")) %>%
+    full_join(ynsc, by = c("src_subject_id", "eventname")) %>%
+    full_join(rel, by = c("src_subject_id", "eventname")) %>%
+    full_join(ADI, by = c("src_subject_id", "eventname"))
+  
+  print("end")
+  
+  return(merged_data)
+} #end function
+
+#combined_data is now the merge between orendain and brieant variables
+
+orendain_data <- load_orendain_ela(data_dir)
+print(paste("n Columns of Orendain Data:", ncol(orendain_data)))
+brieant_data <- load_brieant_ela(data_dir)
+print(paste("n Columns of Brieant Data:", ncol(brieant_data)))
+combined_data <- merge(orendain_data, brieant_data)
+print(paste("n Columns of Combined Data:", ncol(combined_data)))
+```
+
+### Bullying Variables
+
+Orendain et. al. utilizes the variable "kbi_p_c_bully", which is a discrete variable indicating whether a child was bullied in school from parent reports. This variable is only available in the baseline sample. We aim to include youth accounts, with variables that encompass three primary (and distinct) domains of peer bullying: (1) relational bullying, (2) reputation bullying, and (3) overt bullying. These variables are only available in the 2 year follow up, thus manipulation is required to combine indication of bullying in baseline with a comprehensive bullying score in the 2 year follow up.
+
+```{r}
+#replace kbi_p_c_bully with 
+# mh_y_peq -> (1) peq_ss_relational_victim; sum(peq_left_out_vic, peq_invite_vic, peq_exclude_vic)
+#             (2) peq_ss_reputation_victim; sum(peq_rumor_vic, peq_gossip_vic, peq_loser_vic)
+#             (3) peq_ss_overt_victim; sum(peq_chase_vic, peq_threat_vic, peq_hit_vic)
+
+bully_vars <- read.csv(paste(data_dir, 'mental-health/mh_y_peq.csv', sep='/')) %>%
+    filter(eventname == "baseline_year_1_arm_1" | 
+           eventname == "2_year_follow_up_y_arm_1") %>% 
+    select(src_subject_id, eventname, peq_ss_relational_victim, peq_ss_reputation_victim, peq_ss_overt_victim) 
+#will be joined later
+```
+
+# Extrapolation of Necessary Missing Data
+
+We choose to not reject valuable variables observed in Baseline and not in Year 2. To extrapolate we consider two cases:
+
+\(1\) Variables whose indication suggests no change between baseline and year 2 (such as questions related to family history/prior abuse) will be transferred as indicated in previous responses.
+
+\(2\) Variables subject to change will be transferred according to the presence of "instruments" that increase susceptibility to recurrence of such variables.
+
+### Preliminary Demographic Cleaning
+
+```{r}
+#cleaning demographics (race)
+demog_long <- demog %>%
+  pivot_longer(cols = starts_with("demo_race_a_p___"),
+               names_to = "race",
+               values_to = "is_race",
+               values_drop_na = TRUE,
+               names_prefix = "demo_race_a_p___") %>%
+  filter(is_race != 0 | is.na(is_race)) %>%
+  mutate(race = fct_collapse(race,
+                             "White" = 10,
+                             "Black" = 11,
+                             "Native American" = 12,
+                             "Alaskan Native" = 13,
+                             "Native Hawaiian" = 14,
+                             "Guamanian" = 15,
+                             "Samoan" = 16,
+                             "Other Pacific Islander" = 17,
+                             "Asian Indian" = 18,
+                             "Chinese" = 19,
+                             "Filipino" = 20,
+                             "Japanese" = 21,
+                             "Korean" = 22,
+                             "Vietnamese" = 23,
+                             "Other Asian Race" = 24,
+                             "Other Race" = 25,
+                             "NA" = c(77, 99)
+                             )) %>%
+  distinct() %>%
+  group_by(src_subject_id) %>%
+  mutate(order = row_number()) %>%
+  ungroup()
+
+#pivot back to wide dataframe
+demog_wide <- demog_long %>%
+  pivot_wider(names_from = order, values_from = race, values_fill = NA,
+              names_prefix = "race") %>%
+  filter(!is.na(demo_comb_income_v2) | !is.na(demo_sex_v2) |!is.na(demo_ethn_v2)) %>%
+  #continue cleaning demo_ethn_v2, demo_sex_v2, demo_comb_income_v2, 
+  mutate(hispanic_origin = case_match(demo_ethn_v2,
+                                      1 ~ 1,
+                                      2 ~ 0),
+         income = factor(demo_comb_income_v2), 
+         income = fct_collapse(income,
+                               "<$5,000" = "1",
+                               "$5,000-$11,999" = "2",
+                               "$12,000-$15,999" = "3",
+                               "$16,000-$24,999" = "4",
+                               "$25,000-$34,999" = "5",
+                               "$35,000-$49,999" = "6",
+                               "$50,000-$74,999" = "7",
+                               "$75,000-$99,999" = "8",
+                               "$100,000-$199,999" = "9",
+                               ">$200,000" = "10",
+                               other_level = NA), #not sure how to group others as NAs 
+         sex = factor(demo_sex_v2),
+         sex = fct_collapse(sex,
+                             "Male" = "1",
+                             "Female" = "2",
+                             "Intersex-Male" = "3",
+                             other_level = NA),
+         marstat = factor(demo_prnt_marital_v2),
+         marstat = fct_collapse(marstat,
+                                "Married" = "1",
+                                "Widowed" = "2",
+                                "Divorced" = "3",
+                                "Separated" = "4",
+                                "Never Married" = "5",
+                                "Living with Partner" = "6",
+                                other_level = NA),
+#For education variable; 1: < HS Diploma, 2:HS Diploma/GED, 3: Some College, 4: Bachelor's Degree, 5: Post Graduate Degree
+         prnt_ed = factor(demo_prnt_ed_v2),
+         prnt_ed = case_when(prnt_ed == 0 ~ 1,
+                          prnt_ed == 1 ~ 1,
+                          prnt_ed == 2 ~ 1,
+                          prnt_ed == 3 ~ 1,
+                          prnt_ed == 4 ~ 1,
+                          prnt_ed == 5 ~ 1,
+                          prnt_ed == 6 ~ 1,
+                          prnt_ed == 7 ~ 1,
+                          prnt_ed == 8 ~ 1,
+                          prnt_ed == 9 ~ 1,
+                          prnt_ed == 10 ~ 1,
+                          prnt_ed == 11 ~ 1,
+                          prnt_ed == 12 ~ 1,
+                          prnt_ed == 13 ~ 2,
+                          prnt_ed == 14 ~ 2,
+                          prnt_ed == 15 ~ 3,
+                          prnt_ed == 16 ~ 3,
+                          prnt_ed == 17 ~ 3,
+                          prnt_ed == 18 ~ 4,
+                          prnt_ed == 19 ~ 5,
+                          prnt_ed == 20 ~ 5,
+                          prnt_ed == 21 ~ 5,
+                          TRUE ~ NA_real_),
+         prtnr_ed = factor(demo_prtnr_ed_v2),
+         prtnr_ed = case_when(prtnr_ed == 0 ~ 1,
+                          prtnr_ed == 1 ~ 1,
+                          prtnr_ed == 2 ~ 1,
+                          prtnr_ed == 3 ~ 1,
+                          prtnr_ed == 4 ~ 1,
+                          prtnr_ed == 5 ~ 1,
+                          prtnr_ed == 6 ~ 1,
+                          prtnr_ed == 7 ~ 1,
+                          prtnr_ed == 8 ~ 1,
+                          prtnr_ed == 9 ~ 1,
+                          prtnr_ed == 10 ~ 1,
+                          prtnr_ed == 11 ~ 1,
+                          prtnr_ed == 12 ~ 1,
+                          prtnr_ed == 13 ~ 2,
+                          prtnr_ed == 14 ~ 2,
+                          prtnr_ed == 15 ~ 3,
+                          prtnr_ed == 16 ~ 3,
+                          prtnr_ed == 17 ~ 3,
+                          prtnr_ed == 18 ~ 4,
+                          prtnr_ed == 19 ~ 5,
+                          prtnr_ed == 20 ~ 5,
+                          prtnr_ed == 21 ~ 5,
+                          TRUE ~ NA_real_)
+  )
+#take max value between cartakers and assume as education of primary parent
+demog_wide$prnt_ed <- pmax(demog_wide$prnt_ed, demog_wide$prtnr_ed, na.rm = TRUE)
+
+#combine the first two (primary) race identifications into a new column titled "race_prim_2"
+demog_wide$race_prim_2 <- NA
+
+for (i in 1:nrow(demog_wide)) {
+  if (is.na(demog_wide$race2[i])) {
+    demog_wide$race_prim_2[i] <- paste(demog_wide$race1[i])
+  } else {
+    demog_wide$race_prim_2[i] <- paste(demog_wide$race1[i], demog_wide$race2[i], sep = "/")
+  }
+}
+
+drops <- c("demo_sex_v2", "demo_prnt_marital_v2", "demo_ethn_v2", "demo_prnt_ed_v2", "demo_prtnr_ed_v2", "prtnr_ed", "demo_comb_income_v2", "is_race")
+demog_wide <- demog_wide[ , !(names(demog_wide) %in% drops)]
+```
+
+Combining demographics & age, filtering to only those who participated during baseline and year 2.
+
+```{r}
+#| echo: false
+
+#only considering obvervations with participation in surveys during baseline and year 2
+combined_data_2yr_participants <- combined_data %>%
+  group_by(src_subject_id) %>%
+  filter(n_distinct(eventname) == 2) %>%
+  ungroup()
+
+#adding cleaned demographics
+combined_data_2yr_participants <- combined_data_2yr_participants %>%
+  left_join(demog_wide, by = c("src_subject_id", "eventname")) %>%
+  left_join(tlfb_age, by = c("src_subject_id", "eventname")) %>%
+  left_join(bully_vars, by = c("src_subject_id", "eventname"))
+
+#extrapolating demographics (indicated only in baseline) #assuming gender identity, race, 
+#marital status, education, and income remain as indicated in baseline. 
+combined_data_2yr_participants <- combined_data_2yr_participants %>%
+  group_by(src_subject_id) %>%
+  fill(starts_with("race"), .direction = "up") %>%
+  fill(starts_with("hispanic_origin"), .direction = "up") %>%
+  fill(starts_with("income"), .direction = "up") %>%
+  fill(starts_with("sex"), .direction = "up") %>%
+  fill(starts_with("marstat"), .direction = "up") %>%
+  fill(starts_with("prnt_ed"), .direction = "up")
+  
+#drop any duplicate variables in demographics and redundant variables
+drops <- c("demo_prim", "demo_prnt_marital_v2.x", "demo_prnt_ed_v2.x", "demo_prtnr_ed_v2.x", "demo_comb_income_v2.x",
+           "demo_prnt_marital_v2", "demo_prnt_ed_v2", "demo_prtnr_ed_v2", "demo_comb_income_v2", "rel_family_id", "race1", "race2",
+           "race3", "race4", "race5")
+combined_data_2yr_participants <- combined_data_2yr_participants[ , !(names(combined_data_2yr_participants) %in% drops)]
+
+#adding adjusted age (assumed +2 from baseline) to the year 2 observations
+combined_data_2yr_participants <- combined_data_2yr_participants %>%
+  group_by(src_subject_id) %>%
+  mutate(tlfb_age = ifelse(is.na(tlfb_age), na.omit(tlfb_age) + 2, tlfb_age)) %>%
+  ungroup()
+```
+
+### Family History Extrapolation
+
+```{r}
+#| echo: false
+
+#family history extrapolation for year 2 (unaffected by time change)
+combined_data_2yr_participants <- combined_data_2yr_participants %>%
+  group_by(src_subject_id) %>%
+  fill(starts_with("fam_history_"), .direction = "up") %>%
+  fill(starts_with("famhx_4_p"), .direction = "up")
+
+combined_data_2yr_participants <- combined_data_2yr_participants %>%
+  mutate(famhx_4_p = factor(famhx_4_p),
+         famhx_4_p = fct_collapse(famhx_4_p,
+                                "1" = "1",
+                                "0" = "0",
+                                "0" = "999"),
+         fam_history_5_yes_no = factor(fam_history_5_yes_no),
+         fam_history_5_yes_no = fct_collapse(fam_history_5_yes_no,
+                                             "1" = "1",
+                                             "0" = "0",
+                                             "0" = "999"),
+         fam_history_6_yes_no = factor(fam_history_6_yes_no),
+         fam_history_6_yes_no = fct_collapse(fam_history_6_yes_no,
+                                             "1" = "1",
+                                             "0" = "0",
+                                             "0" = "999"),
+         fam_history_7_yes_no = factor(fam_history_7_yes_no),
+         fam_history_7_yes_no = fct_collapse(fam_history_7_yes_no,
+                                             "1" = "1",
+                                             "0" = "0",
+                                             "0" = "999"),
+         fam_history_8_yes_no = factor(fam_history_8_yes_no),
+         fam_history_8_yes_no = fct_collapse(fam_history_8_yes_no,
+                                             "1" = "1",
+                                             "0" = "0",
+                                             "0" = "999"),
+         fam_history_11_yes_no = factor(fam_history_11_yes_no),
+         fam_history_11_yes_no = fct_collapse(fam_history_11_yes_no,
+                                             "1" = "1",
+                                             "0" = "0",
+                                             "0" = "999"),
+         fam_history_12_yes_no = factor(fam_history_12_yes_no),
+         fam_history_12_yes_no = fct_collapse(fam_history_12_yes_no,
+                                             "1" = "1",
+                                             "0" = "0",
+                                             "0" = "999"),
+         fam_history_13_yes_no = factor(fam_history_13_yes_no),
+         fam_history_13_yes_no = fct_collapse(fam_history_13_yes_no,
+                                             "1" = "1",
+                                             "0" = "0",
+                                             "0" = "999")
+                                             )
+```
+
+### Family Scarcity
+
+```{r}
+#| echo: false
+
+combined_data_2yr_participants <- combined_data_2yr_participants %>%
+  group_by(src_subject_id) %>%
+  fill(starts_with("demo_fam_exp"), .direction = "up") #NOT WORKING FOR demo_fam_exp1_v2 & demo_fam_exp5_v2
+
+combined_data_2yr_participants <- combined_data_2yr_participants %>%
+  mutate(demo_fam_exp1_v2 = ifelse(demo_fam_exp1_v2 == 777, 0, demo_fam_exp1_v2),
+         demo_fam_exp2_v2 = ifelse(demo_fam_exp2_v2 == 777, 0, demo_fam_exp2_v2),
+         demo_fam_exp3_v2 = ifelse(demo_fam_exp3_v2 == 777, 0, demo_fam_exp3_v2),
+         demo_fam_exp4_v2 = ifelse(demo_fam_exp4_v2 == 777, 0, demo_fam_exp4_v2),
+         demo_fam_exp5_v2 = ifelse(demo_fam_exp5_v2 == 777, 0, demo_fam_exp5_v2),
+         demo_fam_exp6_v2 = ifelse(demo_fam_exp6_v2 == 777, 0, demo_fam_exp6_v2),
+         demo_fam_exp7_v2 = ifelse(demo_fam_exp7_v2 == 777, 0, demo_fam_exp7_v2))
+```
+
+### Prenatal Substance Exposure
+
+```{r}
+#| echo: false
+
+combined_data_2yr_participants <- combined_data_2yr_participants %>%
+  group_by(src_subject_id) %>%
+  fill(starts_with("devhx_"), .direction = "up")
+
+combined_data_2yr_participants <- combined_data_2yr_participants %>%
+  mutate(devhx_9_tobacco     = ifelse(devhx_9_tobacco == 999, 0, devhx_9_tobacco),
+         devhx_9_alcohol     = ifelse(devhx_9_alcohol == 999, 0, devhx_9_alcohol),
+         devhx_9_marijuana   = ifelse(devhx_9_marijuana == 999, 0, devhx_9_marijuana),
+         devhx_9_coc_crack   = ifelse(devhx_9_coc_crack == 999, 0, devhx_9_coc_crack),
+         devhx_9_her_morph   = ifelse(devhx_9_her_morph == 999, 0, devhx_9_her_morph),
+         devhx_9_oxycont     = ifelse(devhx_9_oxycont == 999, 0, devhx_9_oxycont),
+         devhx_8_other_drugs = ifelse(devhx_8_other_drugs == 999, 0, devhx_8_other_drugs))
+```
+
+### Medical History: Gun/Knife Wounds
+
+```{r}
+#| echo: false
+
+combined_data_2yr_participants <- combined_data_2yr_participants %>%
+  group_by(src_subject_id) %>%
+  fill(starts_with("medhx_6"), .direction = "up")
+```
+
+### Bullying
+
+We will "extrapolate" this data by creating a comprehensive bullying variable that is continuous; determining the extent of social adversity in a school environment.
+
+```{r}
+#| echo: false
+
+combined_data_2yr_participants <- combined_data_2yr_participants %>%
+  mutate(peq_ss_victim = peq_ss_relational_victim + peq_ss_reputation_victim + peq_ss_overt_victim) #min = 9; max = 45
+
+#drop bullying vars that have been aggregated
+drops_bully <- c("peq_ss_relational_victim", "peq_ss_reputation_victim", "peq_ss_overt_victim")
+combined_data_2yr_participants <- combined_data_2yr_participants[ , !(names(combined_data_2yr_participants) %in% drops_bully)]
+
+combined_data_2yr_participants %>%
+  filter(!is.na(peq_ss_victim)) %>%
+  ggplot(aes(x = peq_ss_victim)) +
+  geom_bar() +
+  geom_vline(xintercept = 12.36808, color = "red", linetype = "dashed", size = 1)
+
+combined_data_2yr_participants <- combined_data_2yr_participants %>%
+  mutate(kbi_p_c_bully = factor(kbi_p_c_bully),
+         kbi_p_c_bully = fct_recode(kbi_p_c_bully,
+                                    "1" = "2",
+                                    "2" = "1"))
+
+combined_data_2yr_participants %>%
+  filter(!is.na(kbi_p_c_bully)) %>%
+  ggplot(aes(x = kbi_p_c_bully)) +
+  geom_bar()
+
+
+```
+
+# Post-Extrapolation Cleaning
+
+```{r}
+#| echo: false
+
+# Calculate the proportion of non-zero values per column, excluding specific columns
+combined_data_bl <- combined_data %>%
+  filter(eventname == "baseline_year_1_arm_1")
+
+combined_data_yr2 <- combined_data %>%
+  filter(eventname == "2_year_follow_up_y_arm_1")
+
+combined_data_yr4 <- combined_data %>%
+  filter(eventname == "4_year_follow_up_y_arm_1")
+
+#checking endorsement for variables in baseline 
+non_zero_data_bl <- combined_data %>%
+  select(-src_subject_id, -eventname) %>%  # Exclude these columns from the analysis
+  summarise(across(everything(), ~mean(. != 0, na.rm = TRUE))) %>%
+  pivot_longer(cols = everything(), names_to = "variable", values_to = "prop_non_zero")
+# Filter the tibble to include only those with prop_non_zero less than 0.05%
+vars_to_include_bl <- non_zero_data_bl %>%
+  filter(prop_non_zero >= 0.0005) %>%
+  pull(variable)
+endorsed_data_bl <- combined_data_bl %>%
+  select(all_of(c("src_subject_id", "eventname", vars_to_include_bl)))
+
+#checking endorsement for variables in year 2 
+non_zero_data_yr2 <- combined_data_yr2 %>%
+  select(-src_subject_id, -eventname) %>%  # Exclude these columns from the analysis
+  summarise(across(everything(), ~mean(. != 0, na.rm = TRUE))) %>%
+  pivot_longer(cols = everything(), names_to = "variable", values_to = "prop_non_zero")
+# Filter the tibble to include only those with prop_non_zero less than 0.05%
+vars_to_include_yr2 <- non_zero_data_yr2 %>%
+  filter(prop_non_zero >= 0.0005) %>%
+  pull(variable)
+endorsed_data_yr2 <- combined_data_yr2 %>%
+  select(all_of(c("src_subject_id", "eventname", vars_to_include_yr2)))
+
+#checking endorsement for variables in year 4 
+non_zero_data_yr4 <- combined_data_yr4 %>%
+  select(-src_subject_id, -eventname) %>%  # Exclude these columns from the analysis
+  summarise(across(everything(), ~mean(. != 0, na.rm = TRUE))) %>%
+  pivot_longer(cols = everything(), names_to = "variable", values_to = "prop_non_zero")
+# Filter the tibble to include only those with prop_non_zero less than 0.05%
+vars_to_include_yr4 <- non_zero_data_yr4 %>%
+  filter(prop_non_zero >= 0.0005) %>%
+  pull(variable)
+endorsed_data_yr4 <- combined_data_yr4 %>%
+  select(all_of(c("src_subject_id", "eventname", vars_to_include_yr4)))
+
+
+
+
+# Remove redundant columns
+no_covariate_data <- endorsed_data %>%
+  # Remove covariates, columns that start with "demo_"
+  select(-starts_with("demo_")) %>% 
+  # Clustering var will be represented in design matrices
+  select(-rel_family_id) %>% 
+  # nsc_p_ss_mean_3_items: Neighborhood Safety Protocol: Mean of Parent Report, 
+  # (neighborhood1r_p + neighborhood2r_p + neighborhood3r_p)/3;
+  # We remove the responses to the individual represented in this summary statistics
+  select(-neighborhood2r_p, -neighborhood3r_p) %>%
+  select(-eventname)
+print(paste("n Columns without Covariates:", ncol(no_covariate_data)))
+
+# Recode values in all columns except 'src_subject_id' and those that start with "asr_scr_"
+recoded_data <- no_covariate_data %>%
+  mutate(across(
+    !matches("^asr_scr_|^src_subject_id$"), 
+    ~ na_if(., 999)
+  )) %>%
+  mutate(across(
+    !matches("^asr_scr_|^src_subject_id$"), 
+    ~ na_if(., 7)
+  )) %>%
+  mutate(across(
+    !matches("^asr_scr_|^src_subject_id$"), 
+    ~ na_if(., 777)
+  ))
+```
+
+## Reverse Encoding
+
+Many measures in this data set that are non-binary, are ordinal. As such, every survey question reflecting indicators for ELA are encoded such that the lowest scores are indicative of higher adversity. We will reverse this encoding for such ordinal variables such that the highest scores are the highest indicators of adversity.
+
+```{r}
+#| echo: false
+#reversing the encoding of all scales so higher values indicate greater adversity in youth following method of Brieant et. al.
+
+#crpbi
+ela_data$crpbi_parent1_y = recode(ela_data$crpbi_parent1_y, "1=3; 2=2; 3=1")
+ela_data$crpbi_parent2_y = recode(ela_data$crpbi_parent2_y, "1=3; 2=2; 3=1")
+ela_data$crpbi_parent3_y = recode(ela_data$crpbi_parent3_y, "1=3; 2=2; 3=1")
+ela_data$crpbi_parent4_y = recode(ela_data$crpbi_parent4_y, "1=3; 2=2; 3=1")
+ela_data$crpbi_parent5_y = recode(ela_data$crpbi_parent5_y, "1=3; 2=2; 3=1")
+
+ela_data$crpbi_caregiver12_y = recode(ela_data$crpbi_caregiver12_y, "1=3; 2=2; 3=1")
+ela_data$crpbi_caregiver13_y = recode(ela_data$crpbi_caregiver13_y, "1=3; 2=2; 3=1")
+ela_data$crpbi_caregiver14_y = recode(ela_data$crpbi_caregiver14_y, "1=3; 2=2; 3=1")
+ela_data$crpbi_caregiver15_y = recode(ela_data$crpbi_caregiver15_y, "1=3; 2=2; 3=1")
+ela_data$crpbi_caregiver16_y = recode(ela_data$crpbi_caregiver16_y, "1=3; 2=2; 3=1")
+
+#income
+ela_data$income = recode(ela_data$income, 
+                         "1=10; 2=9; 3=8; 4=7; 5=6; 6=5; 7=4; 8=3; 9=2; 10=1")
+
+#education
+ela_data$prnt_ed = recode(ela_data$prnt_ed, 
+                         "1=5; 2=4; 3=3; 4=2; 5=1")
+
+#parent monitoring scale
+ela_data$parent_monitor_q1_y = recode(ela_data$parent_monitor_q1_y, 
+                                           "1=5; 2=4; 3=3; 4=2; 5=1")
+ela_data$parent_monitor_q2_y = recode(ela_data$parent_monitor_q2_y, 
+                                           "1=5; 2=4; 3=3; 4=2; 5=1")
+ela_data$parent_monitor_q3_y = recode(ela_data$parent_monitor_q3_y, 
+                                           "1=5; 2=4; 3=3; 4=2; 5=1")
+ela_data$parent_monitor_q4_y = recode(ela_data$parent_monitor_q4_y, 
+                                          "1=5; 2=4; 3=3; 4=2; 5=1")
+ela_data$parent_monitor_q5_y = recode(ela_data$parent_monitor_q5_y, 
+                                           "1=5; 2=4; 3=3; 4=2; 5=1")
+
+#neighborhood_crime_y
+ela_data$neighborhood_crime_y = recode(ela_data$neighborhood_crime_y, 
+                                       "1=5; 2=4; 3=3; 4=2; 5=1")
+
+#nsc_p_ss_mean_3_items, Brient et. al. reverses via multiplication by -1
+ela_data$nsc_p_ss_mean_3_items = (ela_data$nsc_p_ss_mean_3_items) * -1
+
+#school safety
+ela_data$school_6_y = recode(ela_data$school_6_y,
+                             "1=4; 2=3; 3=2; 4=1")
+
+
+```
+
+## Further Cleaning
+
+```{r}
+#dropping variables with >50% missing data
+miss_var <- c()
+for (i in 1:ncol(ela_data)){
+  if(length(which(is.na(ela_data[,i]))) > 0.5*nrow(ela_data)) 
+    miss_var <- append(miss_var, i)
+}
+ela_data <- ela_data[,-miss_var]
+```
+
+## FES-Congruence Variables (Post-hoc)
+
+```{r}
+#fes-congruence variable creation
+
+#in the fes_#_cong variables, -1: youth disagreement of adverse environment 
+#                              0: agreement on non-adverse environment
+#                              1: parent disagreement of adverse environment
+#                              2: agreement on adverse environment
+
+ela_data$fes_1_cong <- ifelse(ela_data$fes_youth_q1 == 1 & ela_data$fam_enviro1_p == 1,
+                              2, ela_data$fes_youth_q1 - ela_data$fam_enviro1_p)
+ela_data$fes_2r_cong <- ifelse(ela_data$fes_youth_q2 == 1 & ela_data$fam_enviro2r_p == 1,
+                              2, ela_data$fes_youth_q2 - ela_data$fam_enviro2r_p)
+ela_data$fes_3_cong <- ifelse(ela_data$fes_youth_q3 == 1 & ela_data$fam_enviro3_p == 1,
+                              2, ela_data$fes_youth_q3 - ela_data$fam_enviro3_p)
+ela_data$fes_4r_cong <- ifelse(ela_data$fes_youth_q4 == 1 & ela_data$fam_enviro4r_p == 1,
+                              2, ela_data$fes_youth_q4 - ela_data$fam_enviro4r_p)
+ela_data$fes_5_cong <- ifelse(ela_data$fes_youth_q5 == 1 & ela_data$fam_enviro5_p == 1,
+                              2, ela_data$fes_youth_q5 - ela_data$fam_enviro5_p)
+ela_data$fes_6_cong <- ifelse(ela_data$fes_youth_q6 == 1 & ela_data$fam_enviro6_p == 1,
+                              2, ela_data$fes_youth_q6 - ela_data$fam_enviro6_p)
+ela_data$fes_7r_cong <- ifelse(ela_data$fes_youth_q7 == 1 & ela_data$fam_enviro7r_p == 1,
+                              2, ela_data$fes_youth_q7 - ela_data$fam_enviro7r_p)
+ela_data$fes_8_cong <- ifelse(ela_data$fes_youth_q8 == 1 & ela_data$fam_enviro8_p == 1,
+                              2, ela_data$fes_youth_q8 - ela_data$fam_enviro8_p)
+ela_data$fes_9r_cong <- ifelse(ela_data$fes_youth_q9 == 1 & ela_data$fam_enviro9r_p == 1,
+                              2, ela_data$fes_youth_q9 - ela_data$fam_enviro9r_p)
+
+#aggregating fes-congruence variables; values closer to 0 indicate less subjectively adverse household dynamics
+ela_data$fes_cong_score <- (ela_data$fes_1_cong + ela_data$fes_2r_cong + ela_data$fes_3_cong + ela_data$fes_4r_cong + ela_data$fes_5_cong + ela_data$fes_6_cong + ela_data$fes_7r_cong + ela_data$fes_8_cong + ela_data$fes_9r_cong)
+
+#splitting into 4 categories if each incongruence variable is indicated more than floor(0.5*9) times (>4) No tiebreaker condition will be used to determine which incongruence is most favoring parent disagreement or youth disagreement, such observations will be excluded
+ela_data$cong_count_y_disagree <- rowSums(ela_data[, 97:105] == -1)
+ela_data$cong_count_no_adv_agree <- rowSums(ela_data[, 97:105] == 0)
+ela_data$cong_count_p_disagree <- rowSums(ela_data[, 97:105] == 1)
+ela_data$cong_count_yes_adv_agree <- rowSums(ela_data[, 97:105] == 2)
+
+ela_data_fes_cong <- ela_data %>%
+  filter(
+    (cong_count_y_disagree >= 5 & cong_count_y_disagree != c("cong_count_no_adv_agree", "cong_count_p_disagree", "cong_count_yes_adv_agree" )) |
+      (cong_count_no_adv_agree >= 5 & cong_count_no_adv_agree != c("cong_count_y_disagree", "cong_count_p_disagree", "cong_count_yes_adv_agree" )) |
+      (cong_count_p_disagree >= 5 & cong_count_p_disagree != c("cong_count_no_adv_agree", "cong_count_y_disagree", "cong_count_yes_adv_agree" )) |
+      (cong_count_yes_adv_agree >= 5 & cong_count_yes_adv_agree != c("cong_count_no_adv_agree", "cong_count_p_disagree", "cong_count_y_disagree" ))
+  )
+#cong_class variable classifying which incongruence was majority (1 = agreement on no adversity: 2 = youth disagreement about adversity: 3 = parent disagreement about adversity: 4 = agreement on adversity) 
+#Note: we weight parent disagreement of adverse environment higher to favor youth perceptions of adverse home environment
+ela_data_fes_cong <- ela_data_fes_cong %>%
+  mutate(cong_class = case_when(cong_count_no_adv_agree >= 5 ~ 0,
+                                cong_count_y_disagree >= 5 ~ 1,
+                                cong_count_p_disagree >= 5 ~ 2,
+                                cong_count_yes_adv_agree >= 5 ~ 3
+                                ))
+  
+#dropping count variables for each new data frame & ela_data
+drops_cong <- c("cong_count_y_disagree", "cong_count_no_adv_agree", "cong_count_p_disagree", "cong_count_yes_adv_agree")
+drops_fes_cong <- c("fes_1_cong", "fes_2r_cong", "fes_3_cong", "fes_4r_cong", "fes_5_cong", "fes_6_cong", "fes_7r_cong", "fes_8_cong", "fes_9r_cong", "fes_cong_score")
+ela_data <- ela_data[ , !(names(ela_data) %in% drops_cong)]
+ela_data <- ela_data[ , !(names(ela_data) %in% drops_fes_cong)]
+ela_data_fes_cong <- ela_data_fes_cong[ , !(names(ela_data_fes_cong) %in% drops_cong)]
+```
